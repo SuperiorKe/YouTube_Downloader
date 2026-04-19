@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+env/
+work_env/
+*.log
+.env
+downloads/
+*.part
+*.ytdl
+*.webm
+*.mkv
+*.mp4
+Budgeter/
+db.sqlite3
+
