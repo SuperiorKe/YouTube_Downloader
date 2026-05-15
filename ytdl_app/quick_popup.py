@@ -8,6 +8,7 @@ class QuickPopup(ctk.CTkToplevel):
     def __init__(self, master, url, *args, **kwargs):
         super().__init__(master, *args, **kwargs)
         self.url = url
+        self.video_title = "Unknown Title"
         self.title("Download Detected")
         
         # Make borderless and position in bottom right
@@ -53,33 +54,37 @@ class QuickPopup(ctk.CTkToplevel):
             self.after(0, self.update_ui_with_error, str(e))
 
     def update_ui_with_title(self, title):
+        self.video_title = title
         self.label.configure(text=f"Download: {title}")
         self.btn_video.configure(state="normal")
         self.btn_audio.configure(state="normal")
 
     def update_ui_with_error(self, error):
+        self.video_title = "Unknown Title"
         self.label.configure(text="Title unavailable. Download anyway?")
         self.btn_video.configure(state="normal")
         self.btn_audio.configure(state="normal")
 
     def start_download(self, format_type):
+        url = self.url
+        title = self.video_title
         show_notification("Download Started", "Downloading in background...")
         self.destroy()
         
         # Run download in a background thread
-        threading.Thread(target=self._run_download, args=(format_type,), daemon=True).start()
+        threading.Thread(target=self._run_download, args=(format_type, url, title), daemon=True).start()
 
-    def _run_download(self, format_type):
+    def _run_download(self, format_type, url, title):
         from ytdl_app.state_manager import state
         try:
             config = load_config()
-            request = DownloadRequest(url=self.url)
+            request = DownloadRequest(url=url)
             
             opts = build_yt_dlp_options(config, request=request)
             
             # Setup StateManager progress hook
             def progress_hook(d):
-                state.update_progress(self.url, d)
+                state.update_progress(url, d)
             
             if "progress_hooks" not in opts:
                 opts["progress_hooks"] = []
@@ -93,14 +98,13 @@ class QuickPopup(ctk.CTkToplevel):
                 
             with YoutubeDL(opts) as ydl:
                 # Add to state tracking before download starts
-                title_label = self.label.cget("text").replace("Download: ", "").replace("Title unavailable. Download anyway?", "Unknown Title")
-                state.add_download(self.url, title_label)
+                state.add_download(url, title)
                 
-                info = ydl.extract_info(self.url, download=True)
+                info = ydl.extract_info(url, download=True)
                 title = info.get('title', 'Video')
                 file_path = info.get('requested_downloads', [{'filepath': info.get('_filename')}])[0].get('filepath')
-                state.mark_finished(self.url, file_path)
+                state.mark_finished(url, file_path)
                 show_notification("Download Complete", f"{title} has finished downloading.")
         except Exception as e:
-            state.mark_error(self.url)
+            state.mark_error(url)
             show_notification("Download Error", str(e))
