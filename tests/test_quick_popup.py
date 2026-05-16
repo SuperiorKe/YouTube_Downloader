@@ -1,5 +1,10 @@
 import unittest
+import sys
+import types
 from unittest.mock import patch
+
+sys.modules.setdefault("customtkinter", types.SimpleNamespace(CTkToplevel=object))
+sys.modules.setdefault("yt_dlp", types.SimpleNamespace(YoutubeDL=object))
 
 from ytdl_app import quick_popup
 
