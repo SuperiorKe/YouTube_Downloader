@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+
+# Local environments and secrets
+.env
+.venv/
+env/
+work_env/
+
+# Runtime configuration and personal download history
+config.json
+history.json
+
+# Download outputs and temporary files
+downloads/
+*.part
+*.ytdl
+*.webm
+*.mkv
+*.mp4
+*.mp3
+*.m4a
+
+# Logs and local OS/editor files
+*.log
+.DS_Store

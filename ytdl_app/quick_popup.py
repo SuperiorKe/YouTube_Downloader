@@ -4,6 +4,12 @@ from yt_dlp import YoutubeDL
 from ytdl_app.downloader import download_single_url, DownloadRequest, load_config, build_yt_dlp_options
 from ytdl_app.notifications import show_notification
 
+
+def _title_from_label_text(label_text):
+    title = label_text.replace("Download: ", "").replace("Title unavailable. Download anyway?", "Unknown Title")
+    return title or "Unknown Title"
+
+
 class QuickPopup(ctk.CTkToplevel):
     def __init__(self, master, url, *args, **kwargs):
         super().__init__(master, *args, **kwargs)
@@ -63,13 +69,14 @@ class QuickPopup(ctk.CTkToplevel):
         self.btn_audio.configure(state="normal")
 
     def start_download(self, format_type):
+        title_label = _title_from_label_text(self.label.cget("text"))
         show_notification("Download Started", "Downloading in background...")
         self.destroy()
         
         # Run download in a background thread
-        threading.Thread(target=self._run_download, args=(format_type,), daemon=True).start()
+        threading.Thread(target=self._run_download, args=(format_type, title_label), daemon=True).start()
 
-    def _run_download(self, format_type):
+    def _run_download(self, format_type, title_label):
         from ytdl_app.state_manager import state
         try:
             config = load_config()
@@ -93,7 +100,6 @@ class QuickPopup(ctk.CTkToplevel):
                 
             with YoutubeDL(opts) as ydl:
                 # Add to state tracking before download starts
-                title_label = self.label.cget("text").replace("Download: ", "").replace("Title unavailable. Download anyway?", "Unknown Title")
                 state.add_download(self.url, title_label)
                 
                 info = ydl.extract_info(self.url, download=True)
