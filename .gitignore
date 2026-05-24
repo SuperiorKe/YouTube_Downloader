@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+
+# Local Python environments
+env/
+work_env/
+
+# Local environment and app configuration
+.env
+config.json
+
+# Generated app state and downloads
+history.json
+downloads/
+*.part
+*.ytdl
+*.webm
+*.mkv
+*.mp4
+
+# Local logs and unrelated scratch project state
+*.log
+Budgeter/
+db.sqlite3
