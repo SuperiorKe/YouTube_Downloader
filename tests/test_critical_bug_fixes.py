@@ -15,6 +15,10 @@ def install_quick_popup_stubs():
     yt_dlp.YoutubeDL = object
     sys.modules.setdefault("yt_dlp", yt_dlp)
 
+    plyer = types.ModuleType("plyer")
+    plyer.notification = types.SimpleNamespace(notify=lambda **kwargs: None)
+    sys.modules.setdefault("plyer", plyer)
+
 
 class FakeYoutubeDL:
     def __init__(self, opts):
