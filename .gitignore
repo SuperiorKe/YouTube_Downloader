@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments and local tooling
+env/
+venv/
+work_env/
+.venv/
+
+# Local environment/configuration
+.env
+.env.*
+!.env.example
+config.json
+
+# Runtime app data and generated downloads
+downloads/
+history.json
+*.part
+*.ytdl
+*.webm
+*.mkv
+*.mp4
+
+# Logs and local databases
+*.log
+db.sqlite3
+
