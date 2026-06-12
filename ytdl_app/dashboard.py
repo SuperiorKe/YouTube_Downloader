@@ -2,8 +2,9 @@ import customtkinter as ctk
 import os
 from ytdl_app.state_manager import state
 import threading
-from ytdl_app.downloader import download_single_url, DownloadRequest
+from ytdl_app.download_service import run_tracked_download
 from ytdl_app.notifications import show_notification
+from ytdl_app.platform_utils import open_file
 
 class Dashboard(ctk.CTkToplevel):
     def __init__(self, master, *args, **kwargs):
@@ -98,7 +99,7 @@ class Dashboard(ctk.CTkToplevel):
                 widgets['pb'].configure(progress_color="green")
                 if 'play_btn' not in widgets and data.get('file_path') and os.path.exists(data['file_path']):
                     play_btn = ctk.CTkButton(widgets['frame'], text="Play", width=60,
-                        command=lambda p=data['file_path']: os.system(f'rundll32.exe shell32.dll,OpenAs_RunDLL "{p}"'))
+                        command=lambda p=data['file_path']: open_file(p))
                     play_btn.pack(pady=5)
                     widgets['play_btn'] = play_btn
             else:
@@ -125,51 +126,11 @@ class Dashboard(ctk.CTkToplevel):
         self.tabview.set("Active Downloads")
         
         show_notification("Download Started", "Starting manual download...")
-        threading.Thread(target=self._run_downloader, args=(url, format_type), daemon=True).start()
-
-    def _run_downloader(self, url, format_type):
-        from ytdl_app.downloader import build_yt_dlp_options, load_config
-        from yt_dlp import YoutubeDL
-        import re
-        
-        # Attempt to get title first
-        title = "Manual Download"
-        ydl_opts = {'quiet': True, 'extract_flat': True}
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = info.get('title', 'Unknown Title')
-        except:
-            pass
-            
-        state.add_download(url, title)
-        
-        try:
-            config = load_config()
-            request = DownloadRequest(url=url)
-            opts = build_yt_dlp_options(config, request=request)
-            
-            def progress_hook(d):
-                state.update_progress(url, d)
-                
-            if "progress_hooks" not in opts:
-                opts["progress_hooks"] = []
-            opts["progress_hooks"].append(progress_hook)
-            
-            if format_type == "audio":
-                opts["format"] = "bestaudio/best"
-                opts["extract_audio"] = True
-                opts["audio_format"] = "mp3"
-                opts["outtmpl"] = opts["outtmpl"] + ".mp3"
-                
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                file_path = info.get('requested_downloads', [{'filepath': info.get('_filename')}])[0].get('filepath')
-            state.mark_finished(url, file_path)
-            show_notification("Download Complete", f"{title} finished.")
-        except Exception as e:
-            state.mark_error(url)
-            show_notification("Download Error", str(e))
+        threading.Thread(
+            target=run_tracked_download,
+            args=(url, format_type),
+            daemon=True,
+        ).start()
 
     def _setup_settings_tab(self):
         from ytdl_app.config import load_config, save_config
@@ -240,7 +201,7 @@ class Dashboard(ctk.CTkToplevel):
 
             if item.get('file_path') and os.path.exists(item['file_path']):
                 play_btn = ctk.CTkButton(bottom_frame, text="Play", width=60,
-                    command=lambda p=item['file_path']: os.system(f'rundll32.exe shell32.dll,OpenAs_RunDLL "{p}"'))
+                    command=lambda p=item['file_path']: open_file(p))
                 play_btn.pack(side="right")
             
             self.history_widgets.append(frame)
