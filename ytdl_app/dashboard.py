@@ -31,7 +31,7 @@ class Dashboard(ctk.CTkToplevel):
         state.register_callback(self.on_state_change)
         
         # Initial draw
-        self.on_state_change(state.active_downloads)
+        self.on_state_change(state.get_active_downloads())
 
     def hide_dashboard(self):
         self.withdraw()

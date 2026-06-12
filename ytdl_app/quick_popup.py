@@ -8,6 +8,7 @@ class QuickPopup(ctk.CTkToplevel):
     def __init__(self, master, url, *args, **kwargs):
         super().__init__(master, *args, **kwargs)
         self.url = url
+        self.video_title = "Unknown Title"
         self.title("Download Detected")
         
         # Make borderless and position in bottom right
@@ -53,11 +54,13 @@ class QuickPopup(ctk.CTkToplevel):
             self.after(0, self.update_ui_with_error, str(e))
 
     def update_ui_with_title(self, title):
+        self.video_title = title or "Unknown Title"
         self.label.configure(text=f"Download: {title}")
         self.btn_video.configure(state="normal")
         self.btn_audio.configure(state="normal")
 
     def update_ui_with_error(self, error):
+        self.video_title = "Unknown Title"
         self.label.configure(text="Title unavailable. Download anyway?")
         self.btn_video.configure(state="normal")
         self.btn_audio.configure(state="normal")
@@ -93,8 +96,7 @@ class QuickPopup(ctk.CTkToplevel):
                 
             with YoutubeDL(opts) as ydl:
                 # Add to state tracking before download starts
-                title_label = self.label.cget("text").replace("Download: ", "").replace("Title unavailable. Download anyway?", "Unknown Title")
-                state.add_download(self.url, title_label)
+                state.add_download(self.url, self.video_title)
                 
                 info = ydl.extract_info(self.url, download=True)
                 title = info.get('title', 'Video')

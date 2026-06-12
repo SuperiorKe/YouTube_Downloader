@@ -28,11 +28,25 @@ class StateManager:
             if callback in self.callbacks:
                 self.callbacks.remove(callback)
 
+    def get_active_downloads(self):
+        with self._state_lock:
+            return self._snapshot_active_downloads()
+
+    def _snapshot_active_downloads(self):
+        return {
+            url: data.copy()
+            for url, data in self.active_downloads.items()
+        }
+
     def _notify(self):
+        with self._state_lock:
+            callbacks = list(self.callbacks)
+            active_downloads = self._snapshot_active_downloads()
+
         # Callbacks should be fast or thread-safe UI events
-        for cb in self.callbacks:
+        for cb in callbacks:
             try:
-                cb(self.active_downloads)
+                cb(active_downloads)
             except Exception as e:
                 print(f"State callback error: {e}")
 

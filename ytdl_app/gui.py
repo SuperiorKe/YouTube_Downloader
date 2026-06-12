@@ -55,15 +55,17 @@ class DownloaderGUI:
 
         def on_progress(status):
             if status.get("status") == "downloading":
-                self.progress_var.set(status.get("_percent_str", "downloading"))
+                progress = status.get("_percent_str", "downloading")
+                self.root.after(0, self.progress_var.set, progress)
             elif status.get("status") == "finished":
-                self.progress_var.set("Done")
+                self.root.after(0, self.progress_var.set, "Done")
 
         def worker():
             try:
                 download_single_url(url, on_progress=on_progress, request=request)
             except Exception as exc:
-                messagebox.showerror("Download failed", str(exc))
+                error_message = str(exc)
+                self.root.after(0, messagebox.showerror, "Download failed", error_message)
 
         threading.Thread(target=worker, daemon=True).start()
 
