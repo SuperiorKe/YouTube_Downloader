@@ -1,0 +1,12 @@
+{
+  "name": "tubevault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal offline-first YouTube PWA (companion web app to the desktop downloader)",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "youtubei.js": "^17.0.1"
+  }
+}
