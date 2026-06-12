@@ -1,0 +1,6 @@
+# Dependencies for running the test suite.
+# Runtime deps the tests import directly (kept light; no GUI libraries needed):
+yt-dlp>=2024.8.6
+pyperclip>=1.8.2
+python-dotenv>=1.0.1
+pytest>=8.0

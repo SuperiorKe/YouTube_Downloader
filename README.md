@@ -1,51 +1,115 @@
 # YouTube Downloader
 
-A clean, modular Python application for downloading videos from YouTube using `yt-dlp` and `pytube`. Designed to provide both Command-Line (CLI) and Graphical User Interfaces (GUI) for flexible and fast downloads.
+A desktop YouTube downloader built on [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
+It runs as a lightweight background service that **watches your clipboard** for
+YouTube links and offers a one-click download — plus a full dashboard, a system
+tray icon, and a command-line interface for scripted use.
+
+## ✨ Features
+
+- **Clipboard auto-detect** — copy any YouTube URL (`watch`, `youtu.be`,
+  `shorts`, `live`) and a quick popup appears offering **Video** or **Audio (MP3)**.
+- **System tray** — runs quietly in the background; open the dashboard or quit
+  from the tray menu.
+- **Dashboard** with tabs for:
+  - **Active Downloads** — live progress bars, speed and ETA.
+  - **Manual Download** — paste a URL and pick a format.
+  - **History** — past downloads with a cross-platform **Play** button.
+  - **Settings** — change the download directory.
+- **Robust engine** — `yt-dlp` fetches the best video+audio and merges to MP4;
+  audio downloads are converted to MP3 via ffmpeg.
+- **Cross-platform** — Windows, macOS and Linux.
 
 ## 📁 Repository Structure
 
 ```text
 YouTube_Downloader/
-├── main.py                  # Primary entry point for executing downloads
-├── requirements.txt         # Project dependencies
-├── ytdl_app/                # Core application package
-│   ├── cli.py               # Command Line Interface logic
-│   ├── gui.py               # Graphical User Interface logic
-│   ├── config.py            # Configuration settings
-│   └── downloader.py        # Core yt-dlp downloading logic
-├── downloads/               # Output directory for saved video files
-├── examples/                # Example scripts (e.g., pytube GUI fallback)
-└── other_projects/          # Unrelated Python mini-projects & utilities
+├── main.py                     # Entry point: clipboard monitor + tray + dashboard
+├── requirements.txt            # Runtime dependencies
+├── requirements-dev.txt        # Test dependencies
+├── pytest.ini                  # Test configuration
+├── ytdl_app/                   # Core application package
+│   ├── clipboard_monitor.py    # Watches the clipboard for YouTube URLs
+│   ├── quick_popup.py          # The "Download detected" popup
+│   ├── dashboard.py            # Tabbed dashboard window
+│   ├── sys_tray.py             # System tray icon + menu
+│   ├── downloader.py           # yt-dlp option building + download helpers
+│   ├── download_service.py     # Shared, UI-agnostic download orchestration
+│   ├── state_manager.py        # In-memory active-download state (singleton)
+│   ├── history_manager.py      # Persistent download history (history.json)
+│   ├── config.py               # Config loading/saving (config.json + env)
+│   ├── notifications.py        # Desktop notifications
+│   ├── platform_utils.py       # Cross-platform "open file" helper
+│   ├── cli.py                  # Command-line interface
+│   └── gui.py                  # Minimal standalone Tk GUI
+└── tests/                      # Pytest suite
 ```
-
-## ✨ Features
-
-- **Robust Download Engine:** Powered by `yt-dlp` to fetch the highest quality streams efficiently.
-- **Multiple Interfaces:** Includes both GUI and CLI components in the `ytdl_app` package.
-- **Clean Architecture:** Modular design ensures easy maintainability and extensibility.
 
 ## 🛠️ Prerequisites & Installation
 
-To run this application, it is recommended to use the provided virtual environment (`work_env`) or create a new one.
+- **Python 3.10+**
+- **[ffmpeg](https://ffmpeg.org/)** on your `PATH` (required to merge video+audio
+  and to produce MP3 audio). Alternatively set `FFMPEG_PATH` (see Configuration).
 
-1. **Clone or Access the repository**
-2. **Activate the virtual environment** (if not already active):
-    - Windows: `.\work_env\Scripts\Activate.ps1`
-    - Unix/macOS: `source work_env/bin/activate`
-3. **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+# (optional) create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
+pip install -r requirements.txt
+```
 
 ## 🚀 Usage
 
-Execute the primary script to start downloading. The `main.py` script serves as the basic entry point:
+### Background service (clipboard monitor + tray)
 
 ```bash
 python main.py
 ```
 
-*Note: Depending on how the application evolves, you can also leverage the built-in CLI and GUI modules located directly in the `ytdl_app` package.*
+Copy a YouTube link anywhere and pick **Video** or **Audio (MP3)** in the popup.
+Open the dashboard from the tray icon to watch progress or manage history.
 
-## 📌 Coming Soon
-Additional features and UX refinements are slated to be implemented based on evolving project requirements.
+### Command line
+
+```bash
+python -m ytdl_app.cli "https://youtu.be/dQw4w9WgXcQ" --dir ./downloads
+```
+
+| Option       | Description                                            |
+|--------------|--------------------------------------------------------|
+| `--dir`      | Download directory (overrides `DOWNLOAD_DIR`).         |
+| `--template` | Output template, e.g. `'%(title)s.%(ext)s'`.           |
+
+### Standalone GUI
+
+```bash
+python -m ytdl_app.gui
+```
+
+## ⚙️ Configuration
+
+Settings are read from `config.json` (in the working directory) and/or
+environment variables. JSON values take precedence; a `.env` file is loaded
+automatically if present.
+
+| Setting           | `config.json` key   | Env var            | Default                     |
+|-------------------|---------------------|--------------------|-----------------------------|
+| Download directory| `download_dir`      | `DOWNLOAD_DIR`     | `./downloads`               |
+| Output template   | `output_template`   | `OUTPUT_TEMPLATE`  | `%(title)s.%(ext)s`         |
+| ffmpeg location   | `ffmpeg_path`       | `FFMPEG_PATH`      | (auto-detected on `PATH`)   |
+| Extra yt-dlp opts | `extra_yt_dlp_opts` | `YTDLP_EXTRA_OPTS` | `{}`                        |
+
+`YTDLP_EXTRA_OPTS` accepts comma-separated `key=value` pairs, e.g.
+`YTDLP_EXTRA_OPTS="noplaylist=true"`.
+
+## 🧪 Development & Testing
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+The test suite covers the non-GUI logic (option building, config, state, history
+and URL detection) and runs in CI on every push and pull request across Python
+3.10–3.12. See `.github/workflows/ci.yml`.
