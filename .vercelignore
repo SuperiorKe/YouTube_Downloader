@@ -1,0 +1,15 @@
+# Hide the Python desktop app from the Vercel build so it is detected as a
+# static PWA (public/) + Node functions (api/), not a Python project.
+main.py
+requirements.txt
+requirements-dev.txt
+pytest.ini
+ytdl_app/
+tests/
+examples/
+other_projects/
+work_env/
+__pycache__/
+*.pyc
+.claude/
+docs/
