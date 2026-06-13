@@ -17,3 +17,5 @@ db.sqlite3
 .gitignore
 history.json
 config.json
+node_modules/
+.vercel/
