@@ -1,19 +1,96 @@
 // Shared helpers for the TubeVault API functions.
 import { Innertube } from 'youtubei.js';
+import { BG } from 'bgutils-js';
+import { JSDOM } from 'jsdom';
 
-// Clients tried in order. ANDROID/IOS innertube clients are less likely to hit
-// YouTube's datacenter bot-check than WEB.
-const CLIENTS = ['ANDROID', 'IOS', 'WEB'];
+// YouTube's web BotGuard request key (public, stable).
+const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
+
+// Clients tried in order. WEB carries the poToken we mint below; the mobile
+// clients are kept as a fallback.
+const CLIENTS = ['WEB', 'ANDROID', 'IOS'];
 
 let ytPromise = null;
 
+/**
+ * Mint a session-bound BotGuard proof-of-origin token (poToken). YouTube
+ * requires this for playback from flagged/datacenter IPs (otherwise every
+ * request returns LOGIN_REQUIRED). Runs the BotGuard VM inside a throwaway
+ * jsdom; the browser globals are removed afterwards so youtubei.js still sees
+ * a clean Node environment.
+ */
+async function generatePoToken(visitorData) {
+  const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', {
+    url: 'https://www.youtube.com/',
+    referrer: 'https://www.youtube.com/',
+  });
+
+  const installed = [];
+  for (const key of ['window', 'document', 'location', 'origin', 'navigator']) {
+    if (globalThis[key] === undefined && dom.window[key] !== undefined) {
+      Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true, writable: true });
+      installed.push(key);
+    }
+  }
+
+  try {
+    const bgConfig = {
+      fetch: (input, init) => fetch(input, init),
+      globalObj: globalThis,
+      identifier: visitorData,
+      requestKey: REQUEST_KEY,
+    };
+
+    const challenge = await BG.Challenge.create(bgConfig);
+    if (!challenge) throw new Error('BotGuard challenge was empty');
+
+    const interpreterJs = challenge.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
+    if (!interpreterJs) throw new Error('BotGuard interpreter missing');
+    new Function(interpreterJs)();
+
+    const { poToken } = await BG.PoToken.generate({
+      program: challenge.program,
+      globalName: challenge.globalName,
+      bgConfig,
+    });
+    if (!poToken) throw new Error('poToken was empty');
+    return poToken;
+  } finally {
+    for (const key of installed) {
+      try { delete globalThis[key]; } catch { /* ignore */ }
+    }
+  }
+}
+
+async function createInnertube() {
+  // Bootstrap a player-less client just to obtain visitor data for the poToken.
+  const bootstrap = await Innertube.create({ retrieve_player: false });
+  const visitorData = bootstrap.session.context.client.visitorData;
+
+  let poToken;
+  try {
+    poToken = await generatePoToken(visitorData);
+    console.log('poToken minted (%d chars)', poToken.length);
+  } catch (e) {
+    console.error('poToken generation failed:', String((e && e.message) || e));
+  }
+
+  const opts = {};
+  // Optional extra escape hatch: a logged-in cookie header via env var.
+  if (process.env.YT_COOKIES) opts.cookie = process.env.YT_COOKIES;
+  if (poToken && visitorData) {
+    opts.po_token = poToken;
+    opts.visitor_data = visitorData;
+  }
+  return Innertube.create(opts);
+}
+
 function getYT() {
   if (!ytPromise) {
-    const opts = {};
-    // Optional escape hatch if the datacenter IP gets bot-checked:
-    // set YT_COOKIES to a logged-in cookie header string in Vercel env vars.
-    if (process.env.YT_COOKIES) opts.cookie = process.env.YT_COOKIES;
-    ytPromise = Innertube.create(opts);
+    ytPromise = createInnertube().catch((e) => {
+      ytPromise = null; // allow a fresh attempt on the next request
+      throw e;
+    });
   }
   return ytPromise;
 }

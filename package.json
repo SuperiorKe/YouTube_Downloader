@@ -8,6 +8,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "bgutils-js": "^3.2.0",
+    "jsdom": "^26.1.0",
     "youtubei.js": "^17.0.1"
   }
 }
