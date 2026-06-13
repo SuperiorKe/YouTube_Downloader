@@ -1,94 +1,126 @@
 // Shared helpers for the TubeVault API functions.
 import { Innertube } from 'youtubei.js';
-import { BG } from 'bgutils-js';
+import { BG, buildURL, getHeaders } from 'bgutils-js';
 import { JSDOM } from 'jsdom';
 
 // YouTube's web BotGuard request key (public, stable).
 const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
 
-// Clients tried in order. WEB carries the poToken we mint below; the mobile
-// clients are kept as a fallback.
-const CLIENTS = ['WEB', 'ANDROID', 'IOS'];
+// WEB client carries the proof-of-origin token. Mobile clients need their own
+// attestation and just fail from datacenter IPs, so we use WEB only.
+const CLIENTS = ['WEB'];
 
 let ytPromise = null;
 
-// Diagnostic: records the outcome of the most recent poToken mint attempt so
-// it can be surfaced in API responses (we can't read collapsed runtime logs).
-const poTokenState = { status: 'not-attempted' };
+// Cached BotGuard integrity-token minter. It can mint many per-identifier
+// tokens until the integrity token expires, so we reuse it across requests.
+let minterPromise = null;
+let minterExpiresAt = 0;
+
+// Diagnostics surfaced in API responses (collapsed runtime logs are unreadable).
+const diag = { poToken: 'not-attempted', visitor: 'none' };
 function getPoTokenStatus() {
-  return poTokenState.status;
+  return `${diag.poToken}|visitor:${diag.visitor}`;
 }
 
-/**
- * Mint a session-bound BotGuard proof-of-origin token (poToken). YouTube
- * requires this for playback from flagged/datacenter IPs (otherwise every
- * request returns LOGIN_REQUIRED). Runs the BotGuard VM inside a throwaway
- * jsdom; the browser globals are removed afterwards so youtubei.js still sees
- * a clean Node environment.
- */
-async function generatePoToken(visitorData) {
+/** Install a throwaway jsdom so the BotGuard VM has browser globals. */
+function ensureDom() {
+  if (Object.getOwnPropertyDescriptor(globalThis, 'window')) return;
   const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', {
     url: 'https://www.youtube.com/',
     referrer: 'https://www.youtube.com/',
   });
-
-  const installed = [];
   for (const key of ['window', 'document', 'location', 'origin', 'navigator']) {
     if (globalThis[key] === undefined && dom.window[key] !== undefined) {
       Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true, writable: true });
-      installed.push(key);
-    }
-  }
-
-  try {
-    const bgConfig = {
-      fetch: (input, init) => fetch(input, init),
-      globalObj: globalThis,
-      identifier: visitorData,
-      requestKey: REQUEST_KEY,
-    };
-
-    const challenge = await BG.Challenge.create(bgConfig);
-    if (!challenge) throw new Error('BotGuard challenge was empty');
-
-    const interpreterJs = challenge.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
-    if (!interpreterJs) throw new Error('BotGuard interpreter missing');
-    new Function(interpreterJs)();
-
-    const { poToken } = await BG.PoToken.generate({
-      program: challenge.program,
-      globalName: challenge.globalName,
-      bgConfig,
-    });
-    if (!poToken) throw new Error('poToken was empty');
-    return poToken;
-  } finally {
-    for (const key of installed) {
-      try { delete globalThis[key]; } catch { /* ignore */ }
     }
   }
 }
 
+/**
+ * Build a BotGuard WebPoMinter. Runs the BotGuard challenge + VM, takes a
+ * snapshot, exchanges it for an integrity token, and returns a minter that can
+ * produce proof-of-origin tokens bound to any identifier (visitor data for the
+ * session token, video id for the per-request content token).
+ */
+async function buildMinter(visitorData) {
+  ensureDom();
+  const bgConfig = {
+    fetch: (input, init) => fetch(input, init),
+    globalObj: globalThis,
+    identifier: visitorData,
+    requestKey: REQUEST_KEY,
+  };
+
+  const challenge = await BG.Challenge.create(bgConfig);
+  if (!challenge) throw new Error('BotGuard challenge was empty');
+
+  const interpreterJs = challenge.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
+  if (!interpreterJs) throw new Error('BotGuard interpreter missing');
+  new Function(interpreterJs)();
+
+  const botguard = await BG.BotGuardClient.create({
+    program: challenge.program,
+    globalName: challenge.globalName,
+    globalObj: globalThis,
+  });
+
+  const webPoSignalOutput = [];
+  const botguardResponse = await botguard.snapshot({ webPoSignalOutput });
+
+  const itResponse = await fetch(buildURL('GenerateIT', true), {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify([REQUEST_KEY, botguardResponse]),
+  });
+  if (!itResponse.ok) throw new Error(`GenerateIT HTTP ${itResponse.status}`);
+  const itData = await itResponse.json();
+  const integrityToken = itData?.[0];
+  if (!integrityToken) throw new Error('integrity token missing');
+
+  const ttlSecs = Number(itData?.[1]) || 3600;
+  minterExpiresAt = Date.now() + Math.max(60, ttlSecs - 120) * 1000;
+
+  return BG.WebPoMinter.create({ integrityToken, estimatedTtlSecs: ttlSecs }, webPoSignalOutput);
+}
+
+function getMinter(visitorData) {
+  if (!minterPromise || Date.now() > minterExpiresAt) {
+    minterPromise = buildMinter(visitorData).catch((e) => {
+      minterPromise = null;
+      throw e;
+    });
+  }
+  return minterPromise;
+}
+
+/** Mint a proof-of-origin token bound to `identifier` (visitor data or video id). */
+async function mintPoToken(visitorData, identifier) {
+  const minter = await getMinter(visitorData);
+  return minter.mintAsWebsafeString(identifier);
+}
+
 async function createInnertube() {
-  // Bootstrap a player-less client just to obtain visitor data for the poToken.
+  // Bootstrap a player-less client just to obtain visitor data.
   const bootstrap = await Innertube.create({ retrieve_player: false });
   const visitorData = bootstrap.session.context.client.visitorData;
+  diag.visitor = visitorData ? `len${visitorData.length}` : 'none';
 
-  let poToken;
+  let sessionPoToken;
   try {
-    poToken = await generatePoToken(visitorData);
-    poTokenState.status = `minted:${poToken.length}`;
-    console.log('poToken minted (%d chars)', poToken.length);
+    sessionPoToken = await mintPoToken(visitorData, visitorData);
+    diag.poToken = `minted:${sessionPoToken.length}`;
+    console.log('session poToken minted (%d chars)', sessionPoToken.length);
   } catch (e) {
-    poTokenState.status = `failed:${String((e && e.message) || e)}`.slice(0, 300);
-    console.error('poToken generation failed:', poTokenState.status);
+    diag.poToken = `failed:${String((e && e.message) || e)}`.slice(0, 300);
+    console.error('minter/poToken failed:', diag.poToken);
   }
 
   const opts = {};
   // Optional extra escape hatch: a logged-in cookie header via env var.
   if (process.env.YT_COOKIES) opts.cookie = process.env.YT_COOKIES;
-  if (poToken && visitorData) {
-    opts.po_token = poToken;
+  if (sessionPoToken && visitorData) {
+    opts.po_token = sessionPoToken;
     opts.visitor_data = visitorData;
   }
   return Innertube.create(opts);
@@ -129,13 +161,25 @@ function extractVideoId(input) {
   return null;
 }
 
-/** getBasicInfo with a client fallback chain. Returns {info, client}. */
+/** getBasicInfo using a content-bound poToken for the requested video. */
 async function getInfoWithFallback(videoId) {
   const yt = await getYT();
+
+  // Mint a proof-of-origin token bound to THIS video id — the player rejects
+  // the session-bound token with LOGIN_REQUIRED otherwise.
+  let contentPoToken;
+  try {
+    const visitorData = yt.session.context.client.visitorData;
+    contentPoToken = await mintPoToken(visitorData, videoId);
+  } catch (e) {
+    console.error('content poToken failed:', String((e && e.message) || e));
+  }
+
   let lastErr = null;
   for (const client of CLIENTS) {
     try {
-      const info = await yt.getBasicInfo(videoId, { client });
+      const options = contentPoToken ? { client, po_token: contentPoToken } : { client };
+      const info = await yt.getBasicInfo(videoId, options);
       const status = info.playability_status;
       if (status && status.status !== 'OK') {
         lastErr = new Error(`${status.status}: ${status.reason || 'not playable'} (client ${client})`);
