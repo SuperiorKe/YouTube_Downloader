@@ -1,5 +1,5 @@
 // Shared helpers for the TubeVault API functions.
-const { Innertube } = require('youtubei.js');
+import { Innertube } from 'youtubei.js';
 
 // Clients tried in order. ANDROID/IOS innertube clients are less likely to hit
 // YouTube's datacenter bot-check than WEB.
@@ -94,7 +94,7 @@ function sanitizeFilename(name) {
   );
 }
 
-module.exports = {
+export {
   getYT,
   checkKey,
   extractVideoId,

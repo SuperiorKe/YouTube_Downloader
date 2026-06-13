@@ -1,16 +1,16 @@
-const { Readable } = require('stream');
-const {
+import { Readable } from 'stream';
+import {
   checkKey,
   extractVideoId,
   getInfoWithFallback,
   pickFormats,
   isBotCheck,
   sanitizeFilename,
-} = require('./_lib');
+} from './_lib.js';
 
 // Streams the media bytes through the function: googlevideo stream URLs are
 // IP-locked to whoever resolved them, so the phone cannot fetch them directly.
-module.exports = async (req, res) => {
+export default async (req, res) => {
   if (!checkKey(req, res)) return;
 
   const videoId = extractVideoId(req.query.url);

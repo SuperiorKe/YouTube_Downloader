@@ -1,4 +1,4 @@
-module.exports = async (req, res) => {
+export default async (req, res) => {
   res.status(200).json({
     ok: true,
     locked: Boolean(process.env.ACCESS_KEY),

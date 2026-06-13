@@ -1,12 +1,12 @@
-const {
+import {
   checkKey,
   extractVideoId,
   getInfoWithFallback,
   pickFormats,
   isBotCheck,
-} = require('./_lib');
+} from './_lib.js';
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   if (!checkKey(req, res)) return;
 
   const videoId = extractVideoId(req.query.url);
