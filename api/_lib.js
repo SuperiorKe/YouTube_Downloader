@@ -12,6 +12,13 @@ const CLIENTS = ['WEB', 'ANDROID', 'IOS'];
 
 let ytPromise = null;
 
+// Diagnostic: records the outcome of the most recent poToken mint attempt so
+// it can be surfaced in API responses (we can't read collapsed runtime logs).
+const poTokenState = { status: 'not-attempted' };
+function getPoTokenStatus() {
+  return poTokenState.status;
+}
+
 /**
  * Mint a session-bound BotGuard proof-of-origin token (poToken). YouTube
  * requires this for playback from flagged/datacenter IPs (otherwise every
@@ -70,9 +77,11 @@ async function createInnertube() {
   let poToken;
   try {
     poToken = await generatePoToken(visitorData);
+    poTokenState.status = `minted:${poToken.length}`;
     console.log('poToken minted (%d chars)', poToken.length);
   } catch (e) {
-    console.error('poToken generation failed:', String((e && e.message) || e));
+    poTokenState.status = `failed:${String((e && e.message) || e)}`.slice(0, 300);
+    console.error('poToken generation failed:', poTokenState.status);
   }
 
   const opts = {};
@@ -173,6 +182,7 @@ function sanitizeFilename(name) {
 
 export {
   getYT,
+  getPoTokenStatus,
   checkKey,
   extractVideoId,
   getInfoWithFallback,

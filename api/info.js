@@ -4,6 +4,7 @@ import {
   getInfoWithFallback,
   pickFormats,
   isBotCheck,
+  getPoTokenStatus,
 } from './_lib.js';
 
 export default async (req, res) => {
@@ -44,6 +45,10 @@ export default async (req, res) => {
   } catch (e) {
     const msg = String((e && e.message) || e);
     console.error('info error:', msg);
-    res.status(isBotCheck(msg) ? 503 : 500).json({ error: msg, botCheck: isBotCheck(msg) });
+    res.status(isBotCheck(msg) ? 503 : 500).json({
+      error: msg,
+      botCheck: isBotCheck(msg),
+      poToken: getPoTokenStatus(),
+    });
   }
 };
