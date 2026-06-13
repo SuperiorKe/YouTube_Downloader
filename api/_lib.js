@@ -18,9 +18,9 @@ let minterPromise = null;
 let minterExpiresAt = 0;
 
 // Diagnostics surfaced in API responses (collapsed runtime logs are unreadable).
-const diag = { poToken: 'not-attempted', visitor: 'none' };
+const diag = { poToken: 'not-attempted', visitor: 'none', auth: 'anon' };
 function getPoTokenStatus() {
-  return `${diag.poToken}|visitor:${diag.visitor}`;
+  return `${diag.poToken}|visitor:${diag.visitor}|auth:${diag.auth}`;
 }
 
 /** Install a throwaway jsdom so the BotGuard VM has browser globals. */
@@ -101,10 +101,14 @@ async function mintPoToken(visitorData, identifier) {
 }
 
 async function createInnertube() {
-  // Bootstrap a player-less client just to obtain visitor data.
-  const bootstrap = await Innertube.create({ retrieve_player: false });
+  const cookie = process.env.YT_COOKIES || undefined;
+
+  // Bootstrap a player-less client (with cookie, if any) so the visitor data
+  // and minted poToken match the session we will actually use.
+  const bootstrap = await Innertube.create({ retrieve_player: false, cookie });
   const visitorData = bootstrap.session.context.client.visitorData;
   diag.visitor = visitorData ? `len${visitorData.length}` : 'none';
+  diag.auth = cookie ? 'cookie' : 'anon';
 
   let sessionPoToken;
   try {
@@ -117,8 +121,7 @@ async function createInnertube() {
   }
 
   const opts = {};
-  // Optional extra escape hatch: a logged-in cookie header via env var.
-  if (process.env.YT_COOKIES) opts.cookie = process.env.YT_COOKIES;
+  if (cookie) opts.cookie = cookie;
   if (sessionPoToken && visitorData) {
     opts.po_token = sessionPoToken;
     opts.visitor_data = visitorData;
