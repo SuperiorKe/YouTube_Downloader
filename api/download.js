@@ -41,20 +41,19 @@ export default async (req, res) => {
         playerPresent: !!(yt.session && yt.session.player),
         sabr: !!(info.streaming_data && info.streaming_data.server_abr_streaming_url),
       };
-      // debug=fetch: decipher the URL and probe googlevideo with a 2-byte range
-      // to confirm it serves to this datacenter IP without ingesting the file.
+      // debug=fetch: exercise the REAL youtubei.js download path (proper stream
+      // headers + cpn) but only pull a 3-byte range, so we learn whether
+      // googlevideo serves to this datacenter IP without ingesting the file.
       if (req.query.debug === 'fetch') {
         try {
-          const url = await format.decipher(yt.session.player);
-          out.deciphered = url.slice(0, 120);
-          const probe = await fetch(`${url}&cpn=probe`, {
-            method: 'GET',
-            headers: { Range: 'bytes=0-1' },
-            redirect: 'follow',
+          const webStream = await info.download({
+            itag: format.itag,
+            range: { start: 0, end: 2 },
           });
-          out.upstreamStatus = probe.status;
-          out.upstreamContentRange = probe.headers.get('content-range');
-          out.upstreamContentType = probe.headers.get('content-type');
+          let bytes = 0;
+          for await (const chunk of Readable.fromWeb(webStream)) bytes += chunk.length;
+          out.probeOk = true;
+          out.probeBytes = bytes;
         } catch (e) {
           out.probeError = String((e && e.message) || e);
         }
