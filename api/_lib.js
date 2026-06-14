@@ -1,7 +1,15 @@
 // Shared helpers for the TubeVault API functions.
-import { Innertube } from 'youtubei.js';
+import { Innertube, Platform } from 'youtubei.js';
 import { BG, buildURL, getHeaders } from 'bgutils-js';
 import { JSDOM } from 'jsdom';
+
+// youtubei.js v17 ships a deliberately-throwing signature evaluator and makes
+// the integrator supply one. Without it, deciphering stream URLs fails with
+// "you must provide your own JavaScript evaluator". The extracted player script
+// (data.output) is a self-contained body that ends in `return process(...)` and
+// yields { sig, n }, so running it through Function is all that's needed. This
+// is the same trust model we already accept for the BotGuard interpreter below.
+Platform.shim.eval = (data) => new Function(data.output)();
 
 // YouTube's web BotGuard request key (public, stable).
 const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
