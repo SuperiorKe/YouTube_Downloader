@@ -6,11 +6,11 @@ import { JSDOM } from 'jsdom';
 // YouTube's web BotGuard request key (public, stable).
 const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
 
-// TV_EMBEDDED is the client that currently slips past the "/player" bot check
-// (LOGIN_REQUIRED) when WEB/ANDROID/IOS all fail; WEB is kept as a fallback and
-// still carries our minted proof-of-origin token. Note: neither defeats a
-// flagged datacenter IP on its own — this is the free attempt before proxying.
-const CLIENTS = ['TV_EMBEDDED', 'WEB'];
+// WEB only. It carries our minted per-video proof-of-origin token, which is
+// what actually clears the "/player" LOGIN_REQUIRED bot check from a datacenter
+// IP, and its formats are directly downloadable with the retrieved player.
+// (TV_EMBEDDED was tried but its formats fail to decipher -> broken downloads.)
+const CLIENTS = ['WEB'];
 
 let ytPromise = null;
 
