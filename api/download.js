@@ -41,19 +41,31 @@ export default async (req, res) => {
         playerPresent: !!(yt.session && yt.session.player),
         sabr: !!(info.streaming_data && info.streaming_data.server_abr_streaming_url),
       };
-      // debug=fetch: exercise the REAL youtubei.js download path (proper stream
-      // headers + cpn) but only pull a 3-byte range, so we learn whether
-      // googlevideo serves to this datacenter IP without ingesting the file.
+      // debug=fetch: decipher the URL, surface its key params (pot present? ip?),
+      // and capture googlevideo's actual 403 body so we know WHY it refuses.
       if (req.query.debug === 'fetch') {
         try {
-          const webStream = await info.download({
-            itag: format.itag,
-            range: { start: 0, end: 2 },
+          const url = await format.decipher(yt.session.player);
+          const u = new URL(url);
+          out.paramKeys = [...u.searchParams.keys()];
+          out.hasPot = u.searchParams.has('pot');
+          out.potLen = (u.searchParams.get('pot') || '').length;
+          out.ip = u.searchParams.get('ip');
+          out.c = u.searchParams.get('c');
+          out.mn = u.searchParams.get('mn');
+          const probe = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              Origin: 'https://www.youtube.com',
+              Referer: 'https://www.youtube.com/',
+              Range: 'bytes=0-1',
+            },
+            redirect: 'follow',
           });
-          let bytes = 0;
-          for await (const chunk of Readable.fromWeb(webStream)) bytes += chunk.length;
-          out.probeOk = true;
-          out.probeBytes = bytes;
+          out.upstreamStatus = probe.status;
+          out.upstreamBody = (await probe.text()).slice(0, 300);
         } catch (e) {
           out.probeError = String((e && e.message) || e);
         }
