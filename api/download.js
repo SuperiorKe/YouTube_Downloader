@@ -66,6 +66,15 @@ export default async (req, res) => {
           });
           out.upstreamStatus = probe.status;
           out.upstreamBody = (await probe.text()).slice(0, 300);
+          // Compare the URL's pinned ip to this lambda's real egress ip. A
+          // mismatch means Vercel's pooled egress can't fetch IP-locked media.
+          try {
+            const egress = await (await fetch('https://api.ipify.org')).text();
+            out.egressIp = egress.trim();
+            out.ipMatches = out.egressIp === out.ip;
+          } catch (e) {
+            out.egressIpError = String((e && e.message) || e);
+          }
         } catch (e) {
           out.probeError = String((e && e.message) || e);
         }
