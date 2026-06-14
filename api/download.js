@@ -32,17 +32,34 @@ export default async (req, res) => {
 
     if (req.query.debug) {
       const yt = await getYT();
-      res.status(200).json({
+      const out = {
         itag: format.itag,
         mime: format.mime_type,
-        keys: Object.keys(format),
         hasUrl: !!format.url,
         hasSignatureCipher: !!format.signature_cipher,
         hasCipher: !!format.cipher,
         playerPresent: !!(yt.session && yt.session.player),
-        playerSts: yt.session && yt.session.player ? yt.session.player.sts : null,
         sabr: !!(info.streaming_data && info.streaming_data.server_abr_streaming_url),
-      });
+      };
+      // debug=fetch: decipher the URL and probe googlevideo with a 2-byte range
+      // to confirm it serves to this datacenter IP without ingesting the file.
+      if (req.query.debug === 'fetch') {
+        try {
+          const url = await format.decipher(yt.session.player);
+          out.deciphered = url.slice(0, 120);
+          const probe = await fetch(`${url}&cpn=probe`, {
+            method: 'GET',
+            headers: { Range: 'bytes=0-1' },
+            redirect: 'follow',
+          });
+          out.upstreamStatus = probe.status;
+          out.upstreamContentRange = probe.headers.get('content-range');
+          out.upstreamContentType = probe.headers.get('content-type');
+        } catch (e) {
+          out.probeError = String((e && e.message) || e);
+        }
+      }
+      res.status(200).json(out);
       return;
     }
 
