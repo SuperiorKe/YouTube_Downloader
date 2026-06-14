@@ -6,6 +6,7 @@ import {
   pickFormats,
   isBotCheck,
   sanitizeFilename,
+  getYT,
 } from './_lib.js';
 
 // Streams the media bytes through the function: googlevideo stream URLs are
@@ -26,6 +27,22 @@ export default async (req, res) => {
     const format = kind === 'audio' ? audio : video;
     if (!format) {
       res.status(404).json({ error: `no ${kind} format available` });
+      return;
+    }
+
+    if (req.query.debug) {
+      const yt = await getYT();
+      res.status(200).json({
+        itag: format.itag,
+        mime: format.mime_type,
+        keys: Object.keys(format),
+        hasUrl: !!format.url,
+        hasSignatureCipher: !!format.signature_cipher,
+        hasCipher: !!format.cipher,
+        playerPresent: !!(yt.session && yt.session.player),
+        playerSts: yt.session && yt.session.player ? yt.session.player.sts : null,
+        sabr: !!(info.streaming_data && info.streaming_data.server_abr_streaming_url),
+      });
       return;
     }
 
